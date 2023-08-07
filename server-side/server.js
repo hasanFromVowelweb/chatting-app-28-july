@@ -11,12 +11,17 @@ import multer from 'multer';
 import path from 'path';
 import PublicRoom from './model/publicRoomSchema.js'
 import User from './model/userSchema.js'
+import crypto from 'crypto';
+import dotenv from 'dotenv'
+
 
 //////////////////////////////////////////////////////////////////////////////////////////////
 
 const app = express()
 
 const httpServer = createServer(app);
+
+dotenv.config();
 
 
 const port = process.env.PORT || 32000
@@ -93,6 +98,36 @@ app.get('/download', cors(), (req, res) => {
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 
+////////////////////////////////Message Encryption and Decryption///////////////////////////
+
+const ENCRYPTION_KEY = Buffer.from(process.env.ENCRYPTION_KEY, 'hex');
+// console.log('ENCRYPTION_KEY', ENCRYPTION_KEY)
+
+function encrypt(text) {
+    const IV = Buffer.from(process.env.IV, 'hex'); // Convert IV from hexadecimal string to Buffer
+    console.log('iv', IV)
+    const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), IV);
+    let encrypted = cipher.update(text, 'utf-8', 'hex');
+    encrypted += cipher.final('hex');
+    return `${IV.toString('hex')}:${encrypted}`;
+}
+
+function decrypt(text) {
+    const [iv, encryptedData] = text.split(':');
+    const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), Buffer.from(iv, 'hex'));
+    let decrypted = decipher.update(encryptedData, 'hex', 'utf-8');
+    decrypted += decipher.final('utf-8');
+    return decrypted;
+}
+
+// const originalMessage = 'Hello, this is a secret message!';
+// const encryptedMessage = encrypt(originalMessage);
+// const decryptedMessage = decrypt(encryptedMessage);
+// console.log('encryptedMessage',encryptedMessage)
+// console.log('decryptedMessage', decryptedMessage)
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
 ////////////////////////////////// generate random room  ID ////////////////////////////////
 
 function generateRoomID() {
@@ -154,8 +189,22 @@ io.on("connection", (socket) => {
             // Query messages for the specified room
             const messages = await Message.find();
 
+            const decryptedMessages = messages.map((message) => {
+                return {
+                    _id: message._id,
+                    chatId: message.chatId,
+                    roomId: message.roomId,
+                    sender: message.sender,
+                    timestamp: message.timestamp,
+                    file: message.file,
+                    deleteFrom: message.deleteFrom,
+                    deleteForEveryOne: message.deleteForEveryOne,
+                    status: message.status,
+                    content: decrypt(message.content), // Decrypt the content
+                };
+            });
             // Return the messages
-            messages && io.emit('allChats', messages)
+            decryptedMessages && io.emit('allChats', decryptedMessages)
         } catch (err) {
             console.error('Error fetching messages:', err);
             return [];
@@ -175,7 +224,23 @@ io.on("connection", (socket) => {
             const messages = await Message.find({ roomId });
             // console.log('messages..............', messages);
             // Return the messages
-            messages && io.to(roomId).emit('prevChatfound', messages);
+
+            const decryptedMessages = messages.map((message) => {
+                return {
+                    _id: message._id,
+                    chatId: message.chatId,
+                    roomId: message.roomId,
+                    sender: message.sender,
+                    timestamp: message.timestamp,
+                    file: message.file,
+                    deleteFrom: message.deleteFrom,
+                    deleteForEveryOne: message.deleteForEveryOne,
+                    status: message.status,
+                    content: decrypt(message.content), // Decrypt the content
+                };
+            });
+
+            decryptedMessages && io.to(roomId).emit('prevChatfound', decryptedMessages);
         } catch (err) {
             console.error('Error fetching messages:', err);
         }
@@ -319,7 +384,7 @@ io.on("connection", (socket) => {
                 chatId: message.chatId,
                 roomId: message.roomID,
                 sender: message.sender,
-                content: message.message,
+                content: encrypt(message.message),
                 timestamp,
                 file: message.file,
                 deleteForEveryOne: false,
@@ -598,6 +663,54 @@ app.get('/getPrivate', async (req, res) => {
 
 });
 
+
+
+// app.get('/getMessages', async (req, res) => {
+
+//     try {
+
+//         const messages = await Message.find()
+
+//         console.log('messages........', messages)
+//         res.status(200).json(messages)
+
+//     } catch (error) {
+//         console.error('error occured while getting messages data')
+//     }
+
+// });
+
+
+/////////////////////////////
+
+app.get('/getMessages', async (req, res) => {
+    try {
+        const messages = await Message.find();
+
+        // Decrypt the content field of each message
+        const decryptedMessages = messages.map((message) => {
+            return {
+                _id: message._id,
+                chatId: message.chatId,
+                roomId: message.roomId,
+                sender: message.sender,
+                timestamp: message.timestamp,
+                file: message.file,
+                deleteFrom: message.deleteFrom,
+                deleteForEveryOne: message.deleteForEveryOne,
+                status: message.status,
+                content: decrypt(message.content), // Decrypt the content
+            };
+        });
+
+        res.status(200).json(decryptedMessages);
+    } catch (error) {
+        console.error('Error occurred while getting messages data', error);
+        res.status(500).json({ error: 'Failed to get messages' });
+    }
+});
+
+/////////////////////////////
 
 ///////////////////////////////////////////////////////////////////////////
 

@@ -14,13 +14,14 @@ import axios from 'axios'
 
 export default function Sidebar() {
 
-  const { setChatMoreShow, refreshSidebar, setRefreshSidebar, setUserEmail, userEmail, setUserName, userName,roomID, setRoomID, setChatIconClicked, setChatName, prevChat, setOpenChat, privateNewMsg, setEmptyChat, setPrivateChatData, privateNewMsgRec } = useContext(DataContext);
+  const { setChatMoreShow, refreshSidebar, setRefreshSidebar, setUserEmail, userEmail, setUserName, userName, roomID, setRoomID, setChatIconClicked, setChatName, prevChat, setOpenChat, privateNewMsg, setEmptyChat, setPrivateChatData, privateNewMsgRec } = useContext(DataContext);
 
   ///////////////////login authentication////////////////////
   const { loginWithRedirect } = useAuth0();
   const { logout } = useAuth0();
   const [groups, setGroups] = useState('')
   const [privateSidebar, setPrivateSidebar] = useState('')
+  const [messages, setMessages] = useState('')
 
   const { user, isAuthenticated, isLoading } = useAuth0();
 
@@ -129,7 +130,7 @@ export default function Sidebar() {
   }
 
 
-  ////////////////////////////////////////////////////////////////////////
+  /////////////////////////////route handlers///////////////////////////////////////////
   useEffect(() => {
 
     const fetchData = async () => {
@@ -150,13 +151,31 @@ export default function Sidebar() {
 
 
   useEffect(() => {
-    
+
     const fetchData = async () => {
       try {
         const response = await axios.get('http://localhost:32000/getPrivate');
 
         // console.log('response for private get: ', response?.data);
         setPrivateSidebar(response?.data)
+      } catch (error) {
+        console.log('error occurred on group create', error);
+      }
+    };
+
+    fetchData();
+  }, [refreshSidebar]);
+
+
+
+  useEffect(() => {
+
+    const fetchData = async () => {
+      try {
+        const response = await axios.get('http://localhost:32000/getMessages');
+
+        console.log('response for getMessages : ', response?.data);
+        setMessages(response?.data)
       } catch (error) {
         console.log('error occurred on group create', error);
       }
@@ -188,10 +207,10 @@ export default function Sidebar() {
   ////////////////////////////////////////////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////////////////////////////////
 
-  // Combine the arrays of privateNewMsg, privateNewMsgRec, and groups
+  
   const allChats = [...privateNewMsg, ...privateNewMsgRec, ...groups, ...privateSidebar];
 
-  // Sort the merged array based on timestamp or any other criterion (descending order)
+  
   allChats.sort((a, b) => a.timestamp - b.timestamp);
   ///////////////////////////////////////////////////////////////////////////////////////////
 
@@ -312,25 +331,24 @@ export default function Sidebar() {
 
         {Array.isArray(allChats) &&
           allChats.map((item, i) => {
-            if (item.userName1) {
-              if(item.userName1 === userName || item.userName2 === userName){
-                return (
-                  <SidebarChat
-                    key={item.userName1}
-                    onClick={() => {
-                      if (item.userName1 === userName) {
-                        handlePrivateChatSent(item.roomID, item.userName1, item.userName2, "private");
-                      } else {
-                        handlePrivateChatReceive(item.roomID, item.userName1, item.userName2, "private");
-                      }
-                    }}
-                    groupName={item.userName1 === userName ? item.userName2 : item.userName1}
-                    lastmsg={'this is the last message'}
-                  />
-                );
-              }
-              return null;
-              
+            if (item?.userName1 === userName || item?.userName2 === userName) {
+
+              // console.log('messages from map', messages)
+              return (
+                <SidebarChat
+                  key={item?.roomID}
+                  onClick={() => {
+                    if (item.userName1 === userName) {
+                      handlePrivateChatSent(item.roomID, item.userName1, item.userName2, "private");
+                    } else {
+                      handlePrivateChatReceive(item.roomID, item.userName1, item.userName2, "private");
+                    }
+                  }}
+                  groupName={item.userName1 === userName ? item.userName2 : item.userName1}
+                  lastmsg={'this is the last message'}
+                />
+                
+              );
             } else if (item.members && item.members.includes(userName)) {
               return (
                 <SidebarChat
